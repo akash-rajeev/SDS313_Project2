@@ -1,0 +1,276 @@
+---
+title: "Project 2"
+author: "Akash Rajeev"
+date: "2022-11-14"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(tidyr)
+library(lubridate)
+library(knitr)
+weather = read.csv("daily_weather_data.csv")
+weather = tibble(weather)
+```
+# Data Obtainment and Proccessing:
+
+This dataset is a collection of the recordings of daily weather data recorded in the capitals of 194 countries around the world. It includes variables recording the date the information was collected, the country the data was collected in, the name of the city the data was collected in, the geographic Latitude and Longitude of the city's location, the average air temperature recorded in °C, the minimum and maximum air temperatures recorded in °C, the average wind direction in degrees, the average wind speed in km/h, and the average sea-level air pressure in hPa. This dataset was on Kaggle by Bala Baskar, who said he extracted the data using Meteostat API. 
+
+To obtain this dataset, I just found it on Kaggle and downloaded it as a csv file. Then, I used the read.csv() function to read the data in to R. The data mostly consisted of numerical values and strings for the city and country names. I did end up separating the initial date variable, because it formatted the date in DD-MM-YYYY form, and I thought it might be useful to separate it into three columns for day, month, and year. There were quite a few NA values for all variables except for Date, Longitude and Latitude, and the City and Country variables. I assumed these NA values could have been from inconclusive data reporting, weather stations not reporting all data fully, or the Meteostat API having trouble with pulling some data. Since there were many NA values, even multiple on the same city, I decided to remove them when I was doing calculations using na.rm(). Some challenges I faced when doing these steps is that I had to convert the separated day, month and year columns into numeric type, and that I had to include na.rm() when working with specific variables as there were variables that did not have any NA values.
+
+# Purpose:
+I think that I picked this dataset because I thought that it would be interesting to look at weather trends of various cities around the world, and see how different locations experience different climactic conditions. I hope to investigate if the date, geographic location, temperature, wind speed, and sea-level air pressure of different capital cities are connected to each other in any way, or to find  weather occurrences in the data that I might not have known about.
+
+# Data Description:
+```{r, echo = FALSE}
+# separating the date column into day, month, and year columns
+weather = separate(weather, date, into = c("day", "month", "year"), sep = "-", remove = FALSE)
+
+
+# changing created day, month, and year columns from chr to numeric
+weather$day = as.numeric(weather$day)
+weather$month = as.numeric(weather$month)
+weather$year = as.numeric(weather$year)
+
+# creating function to produce a vector containing type, content, and number of NA values for a given variable 
+tableFunction = function(variable){
+  if((variable == "day") || (variable == "month") || (variable == "year")){type = "numeric";content = paste("displays the", variable);naValues = sum(is.na(weather$day), is.na(weather$month), is.na(weather$year))}
+  else if ((variable == "Latitude") || (variable == "Longitude")){type = "numeric";content = paste("displays the geographic", variable, "of the city");naValues = sum(is.na(weather$Latitude), is.na(weather$Longitude))}
+  else if(variable == "tavg"){type = "numeric";content = "average air temperature of city in °C";naValues = sum(is.na(weather$tavg))}
+  else if(variable == "tmin"){type = "numeric"; content = "minimum temperature of city in °C"; naValues = sum(is.na(weather$tmin))}
+  else if(variable == "tmax"){type = "numeric"; content = "maximum temperature of city in °C"; naValues = sum(is.na(weather$tmax))}
+  else if(variable == "wspd"){type = "numeric"; content = "average wind speed of city in km/h"; naValues = sum(is.na(weather$wspd))}
+  else if(variable == "pres"){type = "numeric";content = "average sea-level air pressure in hPa";naValues = sum(is.na(weather$pres))}
+
+return(c(type, content, naValues))
+    }
+
+# Creating table containing primary variables and their associated information using previous function
+infoVector = c("type:", "content:", "number of NA values:")
+primaryVariableTable = data.frame("variables: " =  infoVector, day = tableFunction("day"), month = tableFunction("month"), year = tableFunction("year"), Latitude = tableFunction("Latitude"), Longitude = tableFunction("Longitude"), averageTemperature = tableFunction("tavg"), minimumTemperature = tableFunction("tmin"), maximumTemperature = tableFunction("tmax"), windSpeed = tableFunction("wspd"), pressure = tableFunction("pres") )
+
+#kable
+kable(primaryVariableTable)
+
+```
+I thought that my data was mostly "clean" as it came from the dataset, so I think the only "cleaning" that I did involved taking the original "date" variable in the dataset, which came in the form DD-MM-YYYY, and tried to separate it into three individual variables for the day, month, and year using separate(). I did this because I thought that it might be easier to analyze the time if I broke it up into separate components. For example, if I wanted to look at temperature changes per day/month/year, it might be easier to have a separate day/month/year variable to use. I kept the original date variable, because I thought it might maybe be useful to have, in case I might need the original date variable. I used a function and an if statement in the code to create the table shown.
+
+# Creation Of New Variables:
+```{r, warnings = FALSE, echo = FALSE}
+#creating temperature difference variable betwen tmax and tmin
+weather$tdif = (weather$tmax) - (weather$tmin)
+weather$tdif[weather$tdif < 0] <- NA
+
+#creating function converting tavg from celsius to fahrenheit
+celsiusToFahrenheit = function(temperature){
+return(temperature*(9/5) + 32)}
+weather$tavgF = celsiusToFahrenheit(weather$tavg)
+
+#creating hemisphere variable using latitude of city
+hemvec = c()
+weathervec = weather$Latitude
+j = 0
+for (i in weathervec){
+  if (i > 0.0) {
+    j = j+1
+    hemvec[j] = "North"}
+  else {
+    j = j+1
+    hemvec[j] = "South" 
+  }
+}
+weather$hemisphere = hemvec
+
+# generating table displaying type, content, and number of NA values for each variable.
+additionalVariableTable = data.frame(Variable =  c("Type:", "Content:", " Number of NA Values:"), TemperatureDifference = c("Numeric", "Displays the difference between the maximum and minimum temperatures in °C", sum(is.na(weather$tdif))), AverageTemperatureInFahrenheit = c("Numeric", "Displays average temperature in Fahrenheit(this variable was calculated using a function)", sum(is.na(weather$tavgF))), Hemisphere = c("Numeric", "Displays the hemisphere of city", sum(is.na(weather$hemisphere))))
+
+kable(additionalVariableTable)
+```
+# Univariate Plots:
+
+## Univariate Plot 1: Average temperature
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+ggplot(weather, aes(x = tavg)) + geom_histogram(color = "navy", fill = "white") + xlim(c(-30, 45)) + theme_bw() + scale_x_continuous(breaks = seq(-35, 45, by = 5)) + xlab("Average temperature in °C") + ylab("Count") + ggtitle("Distribution of average temperature each day for all cities from 2018-2022")
+```
+
+As can be seen from this graph, it seems like most capital cities have an average temperature of 20°C - 30°C, or 68°F - 86°F. This kind of makes sense, because this seems like a normal temperature range that people can tolerate in cities. Interestingly enough, it seems like there are less cities with than cities with an average temperature greater than 30°C than there are cities with an average temperature less than 20°C. This could maybe be because of the large amount of capital cities in colder areas, such as perhaps countries in Europe.
+
+## Univariate Plot 2: Latitude
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+ggplot(weather, aes(x = Latitude)) + geom_histogram(color = "black", fill = "lavender") + scale_x_continuous(breaks = seq(-55, 80, by = 10)) + xlab("Geographic Latitude (Negative is °S, Positive is °N)") + ylab("Instances in dataset") + ggtitle("Distribution of Latitudes for Geographic Latitudes in Data")
+```
+
+From this histogram, we can see that the majority of capital cities appear to be located from 10°N - 25°N and 30°N to 55°N. In the Southern Hemisphere, it seems that most capital cities lie in around 20°S and 15°S - 5°S. It appears that there are more capital cities in the Northern Hemisphere than in the Southern Hemisphere, which may be because there are more countries in the Northern Hemisphere.
+
+On Google Earth(1), we can see that 10°N-25°N covers Central America, Sub-Saharan Africa, Arabian peninsula, and regions of South and Southeast Asia. 30°N-55°N covers lots of mainland Europe, central Asia, part of China, Japan, and the Korean Peninsula, the United States of America, and Canada. Perhaps one reason for the increased count in these latitudes could be because some of these regions, like Central America and Europe, have lots of countries in a relatively smaller geographic area.
+
+20°S and 15°S-5°S contains regions of South America, Southeast Asia including Indonesia and Malaysia, some Pacific Islands like Tuvalu, Tokelau, the Solomon Islands, American Samoa, Australia, and more.
+
+## Univariate Plot 3: Wind Speed
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+ggplot(weather, aes(x = wspd)) + geom_boxplot(fill = "gray") + scale_x_continuous(breaks = seq(0, 110, by = 10)) + xlab("Speed of wind (km/h)") + ylab("Instances in dataset") + theme_classic() + ggtitle("Distribution of windspeed in km/h in data")
+
+```
+
+This boxplot displays the distribution of the wind speed data in the dataset. From this boxplot, we can see that the average speed of the wind is around 13.32034, that 25 % of wind speed observations were below `r fivenum(weather$wspd)[2]`, and that 75% wind speed observations recorded winds less than `r fivenum(weather$wspd)[4]`. There are also a notable amount of observations greater 30 km/h.
+
+There seems to be an outlier of 105.5 km/h wind speed. When I checked the dataset, I think this happened in Saipan, in the Northern Mariana Islands, on October 25th, 2018. According to FEMA(2), on October 24th, 2018, the Super Typhoon Yutu made landfall on the islands of Tinian and Saipan.
+
+This typhoon was category 5, caused horrible amounts of damage, and was "the strongest typhoon ever recorded to impact the Mariana islands and the second-strongest to strike the United States or its territories(FEMA)". Here's some articles I found about it: https://en.wikipedia.org/wiki/Typhoon_Yutu https://www.washingtonpost.com/energy-environment/2018/10/24/extreme-category-typhoon-yutu-makes-devastating-landfall-northern-mariana-islands-us-commonwealth/
+
+## Univariate Plot 4: Sea-Level Air Pressure
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+ggplot(weather, aes(x = pres)) + geom_histogram(color = "black", fill = "light blue") + theme_bw() + xlab(" Sea-Level Air Pressure in hPa") + scale_x_continuous(breaks = seq(860, 1058, by = 10)) + ggtitle("Distribution of Sea-Level Air Pressure in hPa in dataset")
+```
+
+From this histogram we can see that the majority of instances of sea-level air pressure in the weather are around 1012 hPa, which is  according to the NOAA(6), is close to the typical pressure at sea level of 1013.25 millibars. 
+
+## Univariate Plot 5: Temperature Difference
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+ggplot(weather, aes(x = tdif)) + geom_boxplot(color = "black", fill = "salmon") + xlab("Difference between maximum and minimum temperatures in °C") + scale_x_continuous(breaks = seq(0, 65, by = 10)) + ggtitle("Temperature Difference Between Maximum and Minimum Temperatures in Dataset. ")
+
+```
+
+From this histogram I think that most of the temperature differences in the dataset are around 7.628584. 
+
+There seems to be three notable outliers of a temperature difference 64 °C. Interestingly enough, when I checked the dataset, these large temperature drops all occured on November 23rd, 2019, in the cities of The Valley, Anguilla, Gustavia, St. Barthelemy, and St. Martin, Marigot. When I looked on Google Earth(1), it seems like Anguilla, St. Barthelemy, and Marigot are  islands located close to each other in the Caribbean, so maybe the reason all three cities had similar temperature drops is because they were close together, or maybe shared a weather station.
+
+When I checked past data for The Valley, Anguilla on timeanddate.com(3) on November 23, 2019, it said the high was 86°F and the low was 79°F, so I think there might have been a mistake or error in the weather reporting for that day.
+
+# Multivariate Plots:
+
+## Multivariate Plot 1:
+```{r, echo = FALSE}
+# creating vectors to use in for loop for finding average monthly temperature
+months = c(1:12)
+cities = c("Jakarta", "Kinshasa", "Buenos Aires", "Wellington", "Suva", "Lima", "Tokyo", "New Delhi", "Ottawa", "London", "Washington", "Stockholm" )
+
+#empty vector
+monthlyAverageTemperatures = numeric(0)
+
+
+# for loop appending to monthlyAverageTemperature empty vector adding in the mean of each month temperature
+monthlyAverageTemperature = c()
+for (c in cities){
+  for (m in months) {
+    monthlyAverageTemperature = append(monthlyAverageTemperature, mean(filter(weather, city == c, month == m )$tavg, na.rm = TRUE))
+  }
+}
+
+#converting to numeric vector
+monthlyAverageTemperature = as.double(monthlyAverageTemperature)
+
+# adding in compatible columns for dataframe with monthlyAverageTemperature
+citiesTable = c(rep("Jakarta", 12), rep("Kinshasa", 12), rep("Buenos Aires", 12), rep("Wellington", 12), rep("Suva", 12), rep("Lima", 12), rep("Tokyo", 12), rep("New Delhi", 12), rep("Ottawa", 12), rep("London", 12), rep("Washington", 12), rep("Stockholm", 12))
+hemisphereTable = c(rep("Southern", 72), rep("Northern", 72))
+
+#creating dataframe using previous vectors
+monthsavgtemp = data.frame(months, citiesTable, monthlyAverageTemperature, hemisphereTable)
+  
+#plot 
+ggplot(monthsavgtemp, aes(x = months, y = monthlyAverageTemperature, color = citiesTable, linetype = hemisphereTable)) + scale_x_continuous(breaks = seq(1, 12, by = 1)) + scale_y_continuous(breaks = seq(-10, 40, by = 5)) + geom_line() + geom_point(size = 0.5)+ theme_classic() + xlab("Month of Year") + ylab("Average Monthly Temperature over 5 years") + ggtitle("Average Monthly Temperature Over 5 Years and Month") + labs(color = "Cities", linetype = "Hemisphere")
+
+```
+
+In this plot I tried to take 6 cities from the Northen Hemisphere and 6 cities from the Southern Hemisphere and plot the average monthly temperature of past years. I used a for loop to help find the monthly average temperature for this plot.
+
+I think that from this plot you might be able to see how cities in the Northern Hemisphere and cities in the Southern Hemisphere display different average temperatuer patterns. It appears that most of the cities in the Northern Hemisphere start cold in early year, warm up during mid-year and get colder again as approaching September, October, November, December. In the Southern Hemisphere, although it's not as clear, it seems like some cities are warmer in the earlier months, lower in temperatuer as approaching mid-year, and slightly rise back as approaching September, October, November, December.
+
+This may show how, because of the Earth's tilt, the Northern and Southern Hemispheres receive the Sun's most direct rays at different parts of the year - summer in Northern Hemisphere may be winter in Southern Hemisphere, and winter in Northern Hemisphere may be summer in Southern Hemisphere.
+
+## Multivariate Plot 2:
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+ggplot(weather) + geom_point(mapping = aes(x = Latitude, y = tavg), pch = 21, fill = "light blue", alpha = 0.5) + scale_x_continuous(breaks = seq(-55, 80, by = 10 )) + scale_y_continuous(breaks = seq(-35, 45, by = 10)) + xlab("Geographic Latitude, Positive is °N, Negative is °S") + ylab("Average Temperature in °C") + ggtitle("Average Temperature and Geographic Latitude of City Observations in Dataset.")
+```
+
+This plot is a scatterplot of the geographic Latitude of every observation in the dataset mapped with the average temperature of the same observation.
+
+It appears that the majority of observations and cities are located within visible clump between 25°N - 65°N. It appears that there is also notable clump located 25°S - 5°S. 
+
+On Google Earth(1), 25°N - 65°N covers most of the Northern Hemisphere, so it makes sense that most observations occured there. This range of latitude covers most of North America, Europe, North Africa, main land Asia, Japan, South Korea.
+
+The isolated, smaller clumps at around 78°N and 55°S-50°S are Longyearbyen in the Svalbard islands, and Bouvet Island. The average temperature also appears to increase as you approach regions closer to the equator, which may be because the equator is more tropical and doesn't experience colder temperatures as often maybe.
+
+## Multivariate Plot 3:
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+ggplot(df = weather) + geom_point(mapping = aes(x = weather$pres, y = weather$wspd), pch = 21, fill = "lavender", alpha = 0.5)  + geom_smooth(mapping = aes(x = weather$pres, y= weather$wspd), method= "lm" ) + xlab("Sea-Level Air Pressure in hPa") + ylab("Wind Speed in km/h") + ggtitle("Sea-Level Air Pressure against Weather Wind Speed")
+```
+
+This scatterplot plots the sea-level air pressure in hPa against the wind speed in km/h. In this plot we can see that the majority of observations in the dataset lie in windspeeds from 0 km/h - 60 km/h and 975 hPa - 1050 hPa.
+
+These two variables have a slightly negative correlation of -0.1153403. Therefore, I do not think that these two variables are strictly related to each to other, and that an increase in air pressure may not be solidly related to a decrease in wind speed.
+
+## Multivariate Plot 4:
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+ggplot(df = weather) + geom_point(mapping = aes(x = weather$tdif, y = weather$wspd), pch = 21, fill = "green", alpha = 0.5)  + geom_smooth(mapping = aes(x = weather$tdif, y= weather$wspd), method= "lm" ) + scale_x_continuous(breaks = seq(0, 64, by = 5)) + scale_y_continuous(breaks = seq(0, 110, by = 10)) + xlab("Temperature Difference in °C") + ylab("Wind Speed in km/h") + ggtitle("Temperature difference against Weather Wind Speed")
+
+```
+
+This scatterplot displays the relationship between temperature difference in °C and wind speed in km/h. It appears that the majority of observations had a temperature difference of 0°C - 20°C and a wind speed of 0 km/h to 60 km/h. Looking at the graph. Their correlation is -0.32, indicating a slightly weak negative correlation, so I don't know if it could be said that they are related to each other.
+
+## Multivariate Plot 5:
+```{r, echo = FALSE}
+# creating vectors for cities, years, and yearsavgtemp
+citiesPlot5 = c("Ottawa", "Washington", "Berlin", "Cairo", "Kinshasa", "New Delhi", "Beijing", "Tokyo", "Jakarta", "Singapore", "Nuuk", "Madrid")
+yearsPlot5 = c(2018, 2019, 2020,  2021, 2022)
+cityNamesColumn = c(rep("Ottawa", 5), rep("Washington", 5), rep("Berlin", 5), rep("Cairo", 5), rep("Kinshasa", 5), rep("New Delhi", 5), rep("Beijing", 5), rep("Tokyo", 5), rep("Jakarta", 5), rep("Singapore", 5), rep("Nuuk", 5), rep("Madrid", 5))
+
+#empty vector to hold the yearly average temperatures
+yearlyAverageTemperature = numeric(0)
+
+#for loop appending to yearlyAverageTempersture 
+for (i in citiesPlot5){
+  for (j in yearsPlot5){
+    yearlyAverageTemperature = append(yearlyAverageTemperature, mean(filter(weather, city == i, year == j)$tavg, na.rm = TRUE))
+  }
+}
+
+# creating dataframe with yearlyAverageTemperature, yearsPlot5, cityNamesColumn
+yearsavgtemp = data.frame(yearsPlot5, cityNamesColumn, yearlyAverageTemperature)
+
+#plotting
+ggplot(data = yearsavgtemp, aes(x = yearsPlot5, y = yearlyAverageTemperature, color = cityNamesColumn)) + scale_y_continuous(breaks = seq(-5, 30, by = 5 ))  + geom_line() + geom_point(size = 0.5) + theme_classic() + stat_summary(geom = "line", fun = "mean", color = "black", size = 0.5, linetype = "dashed") + stat_summary(geom = "point", fun = "mean", color = "black", size = 0.5) + labs(color = "Cities") + xlab("Years") + ylab("Average Temperature in °C") + ggtitle("Yeraly Average Temperature and Time for Cities in Dataset") 
+
+```
+
+For this multivariate plot, I tried to plot the average temperature of all months for a variety of cities around the world from 2018 to 2022. The dashed, black line represents the average temperatures for shown cities over the past 5 years.
+
+From this graph, it appears that the average yearly temperature has not drastically changed by a large amount for each of the cities. Some cities seem to have increased over the yers like Berlin, Madrid, Kinshasa, and New Delhi, while others, like Cairo, Nuuk, and Singapore, seem to have slightly decreased in 2022 from 2021.
+
+It seems like the average temperature has increased slightly since 2018, but I don't think  data is enough to make  conclusive statement.
+
+# Functions, For Loop, and If Statement:
+
+In this program, I utilized a function and an if statement to help create the table describing my primary variables of interest. I also used a function to help calculate the average temperature in Fahrenheit variable. I also used a for loop to help create the monthly average temperature data for the first multivariate plot.
+
+# NA Values:
+
+As described in question 3, there were quite a few NA values for many variables in this dataset, meaning that not all recordings of variables were used. I'm not sure what caused these NA variables to happen, and it could have been multiple things, but I decided to remove them from my calculations because I thought that most cities had enough existing observations for each variable that the NA values might not be due to extreme weather events or something like that.
+
+# Debugging Experience:
+
+I think one debugging experience that occured while creating this report could have been that when I was calculating the monthly average temperature for cities for the first multivariate plot. I wanted to find the average monthly temperature over all for years for each city, but I kept getting values that seemed to repeat or not make sense. Eventually, I realized that I had structured the for loop  which I used to try and help calculate these values wrong. I think I was able to fix the structure of the for loop and it gave me values that I think were right.
+
+# References:
+Data used: https://www.kaggle.com/datasets/balabaskar/historical-weather-data-of-all-country-capitals
+
+(1) Google Earth: https://earth.google.com/web/
+
+(2) FEMA Super Typhoon Yutu: One Year Later Article: https://www.fema.gov/press-release/20210318/super-typhoon-yutu-one-year-later 
+
+(3) timeanddate.com: https://www.timeanddate.com/
+
+(4) Wikipedia Typhoon Yutu Article: https://en.wikipedia.org/wiki/Typhoon_Yutu
+
+(5) Washington Post Article: https://www.washingtonpost.com/energy-environment/2018/10/24/extreme-category-typhoon-yutu-makes-devastating-landfall-northern-mariana-islands-us-commonwealth/
+
+(6) NOAA National Data Buoy Center: https://www.ndbc.noaa.gov/educate/pressure.shtml 
+
+# Link to GitHub Repository:
+https://github.com/akash-rajeev/SDS313_Project2
